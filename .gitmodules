@@ -1,0 +1,3 @@
+[submodule "etna"]
+	path = etna
+	url = git@github.com:FptrP/etna.git
