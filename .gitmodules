@@ -1,0 +1,3 @@
+[submodule "etna_sample"]
+	path = etna_sample
+	url = git@github.com:FptrP/etna_sample.git
