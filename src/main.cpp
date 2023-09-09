@@ -4,6 +4,7 @@
 #include <etna/EtnaConfig.hpp>
 #include <etna/GlobalContext.hpp>
 #include <etna/SubmitContext.hpp>
+#include <etna/SyncCommandBuffer.hpp>
 
 #include <GLFW/glfw3.h>
 
@@ -22,7 +23,7 @@ static std::optional<vk::UniqueSurfaceKHR> create_surface(GLFWwindow *window)
   return {};
 }
 
-void write_commands(vk::CommandBuffer cmd, const etna::Image &backbuffer)
+void write_commands(vk::CommandBuffer cmd, etna::CmdBufferTrackingState &cmd_tracker, const etna::Image &backbuffer)
 {
   vk::ImageSubresourceRange range {
     .aspectMask = vk::ImageAspectFlagBits::eColor,
@@ -31,41 +32,30 @@ void write_commands(vk::CommandBuffer cmd, const etna::Image &backbuffer)
     .baseArrayLayer = 0,
     .layerCount = 1
   };
+  
+  etna::CmdBarrier barrier;
 
-  vk::ImageMemoryBarrier2 to_transfer[] {{
-    .srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe,
-    .srcAccessMask = vk::AccessFlags2{},
-    .dstStageMask = vk::PipelineStageFlagBits2::eTransfer,
-    .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
-    .oldLayout = vk::ImageLayout::eUndefined,
-    .newLayout = vk::ImageLayout::eTransferDstOptimal,
-    .image = backbuffer.get(),
-    .subresourceRange = range
-  }};
+  cmd_tracker.requestState(backbuffer, 0, 0, etna::ImageSubresState {
+    .activeStages = vk::PipelineStageFlagBits2::eTransfer,
+    .activeAccesses = vk::AccessFlagBits2::eTransferWrite,
+    .layout = vk::ImageLayout::eTransferDstOptimal
+  });
 
-  vk::ImageMemoryBarrier2 to_present[] {{
-    .srcStageMask = vk::PipelineStageFlagBits2::eTransfer,
-    .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
-    .dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe,
-    .dstAccessMask = vk::AccessFlags2 {},
-    .oldLayout = vk::ImageLayout::eTransferDstOptimal,
-    .newLayout = vk::ImageLayout::ePresentSrcKHR,
-    .image = backbuffer.get(),
-    .subresourceRange = range
-  }};
-
-  vk::DependencyInfo dep1 {};
-  dep1.setImageMemoryBarriers(to_transfer);
+  cmd_tracker.flushBarrier(barrier);
+  barrier.flush(cmd);
 
   vk::ClearColorValue clear_val {};
   clear_val.setFloat32({1.f, 0.f, 0.f, 0.f});
-
-  cmd.pipelineBarrier2(dep1);
   cmd.clearColorImage(backbuffer.get(), vk::ImageLayout::eTransferDstOptimal, clear_val, {range});
 
-  vk::DependencyInfo dep2 {};
-  dep2.setImageMemoryBarriers(to_present);
-  cmd.pipelineBarrier2(dep2);
+  cmd_tracker.requestState(backbuffer, 0, 0, etna::ImageSubresState {
+    .activeStages = vk::PipelineStageFlags2{},
+    .activeAccesses = vk::AccessFlags2{},
+    .layout = vk::ImageLayout::ePresentSrcKHR
+  });
+
+  cmd_tracker.flushBarrier(barrier);
+  barrier.flush(cmd);
 }
 
 int main()
@@ -93,6 +83,7 @@ int main()
   etna::initialize(params);
   auto surface = create_surface(window).value();
   auto submitCtx = etna::create_submit_context(surface.release(), {1024, 768});
+  auto cmdTracker = etna::CmdBufferTrackingState{};
 
   auto swapchainRecreateCb = [&](const char *where) {
     etna::get_context().getDevice().waitIdle();
@@ -100,6 +91,7 @@ int main()
     int width = 0, height = 0;
     glfwGetWindowSize(window, &width, &height);
     submitCtx->recreateSwapchain({.width = uint32_t(width), .height = uint32_t(height)});
+    cmdTracker.onSync();
   };
 
   while(!glfwWindowShouldClose(window)) {
@@ -114,7 +106,7 @@ int main()
 
     auto cmd = submitCtx->acquireNextCmd();
     cmd.begin(vk::CommandBufferBeginInfo {});
-    write_commands(cmd, *backbuffer);
+    write_commands(cmd, cmdTracker, *backbuffer);
     ETNA_ASSERT(cmd.end() == vk::Result::eSuccess);
     
     state = submitCtx->submitCmd(cmd, true);
