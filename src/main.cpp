@@ -23,39 +23,47 @@ static std::optional<vk::UniqueSurfaceKHR> create_surface(GLFWwindow *window)
   return {};
 }
 
-void write_commands(vk::CommandBuffer cmd, etna::CmdBufferTrackingState &cmd_tracker, const etna::Image &backbuffer)
+static etna::GraphicsPipeline create_pipeline(vk::Format swapchain_fmt)
 {
-  vk::ImageSubresourceRange range {
-    .aspectMask = vk::ImageAspectFlagBits::eColor,
-    .baseMipLevel = 0,
-    .levelCount = 1,
-    .baseArrayLayer = 0,
-    .layerCount = 1
-  };
-  
-  etna::CmdBarrier barrier;
-
-  cmd_tracker.requestState(backbuffer, 0, 0, etna::ImageSubresState {
-    .activeStages = vk::PipelineStageFlagBits2::eTransfer,
-    .activeAccesses = vk::AccessFlagBits2::eTransferWrite,
-    .layout = vk::ImageLayout::eTransferDstOptimal
+  etna::create_program("triangle", {
+    "shaders/triangle/shader.vert.spv",
+    "shaders/triangle/shader.frag.spv"
   });
 
-  cmd_tracker.flushBarrier(barrier);
-  barrier.flush(cmd);
+  etna::GraphicsPipeline::CreateInfo info {};
+  info.fragmentShaderOutput.colorAttachmentFormats.push_back(swapchain_fmt);
+  return etna::get_context().getPipelineManager().createGraphicsPipeline("triangle", info);
+}
 
-  vk::ClearColorValue clear_val {};
-  clear_val.setFloat32({1.f, 0.f, 0.f, 0.f});
-  cmd.clearColorImage(backbuffer.get(), vk::ImageLayout::eTransferDstOptimal, clear_val, {range});
+void write_commands(etna::SyncCommandBuffer &cmd, const etna::Image &backbuffer, 
+  const etna::GraphicsPipeline &pipeline)
+{
+  auto resolution = backbuffer.getInfo().extent;
 
-  cmd_tracker.requestState(backbuffer, 0, 0, etna::ImageSubresState {
-    .activeStages = vk::PipelineStageFlags2{},
-    .activeAccesses = vk::AccessFlags2{},
-    .layout = vk::ImageLayout::ePresentSrcKHR
+  cmd.beginRendering({{0, 0}, {resolution.width, resolution.height}}, {
+    etna::RenderingAttachment {
+      .view = backbuffer.getView({}),
+      .layout = vk::ImageLayout::eColorAttachmentOptimal,
+      .loadOp = vk::AttachmentLoadOp::eClear
+    }
   });
 
-  cmd_tracker.flushBarrier(barrier);
-  barrier.flush(cmd);
+  cmd.bindPipeline(pipeline);
+  cmd.setViewport(0, {
+    vk::Viewport {
+      .width = (float)resolution.width, 
+      .height = (float)resolution.height, 
+      .minDepth = 0.f, 
+      .maxDepth = 1.f
+    }
+  });
+  cmd.setScissor(0, {vk::Rect2D{{0, 0}, {resolution.width, resolution.height}}});
+  cmd.draw(3, 1, 0, 0);
+  cmd.endRendering();
+
+  cmd.transformLayout(backbuffer, vk::ImageLayout::ePresentSrcKHR, {
+    vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});
+
 }
 
 int main()
@@ -83,7 +91,7 @@ int main()
   etna::initialize(params);
   auto surface = create_surface(window).value();
   auto submitCtx = etna::create_submit_context(surface.release(), {1024, 768});
-  auto cmdTracker = etna::CmdBufferTrackingState{};
+  auto pipeline = create_pipeline(submitCtx->getSwapchainFmt());
 
   auto swapchainRecreateCb = [&](const char *where) {
     etna::get_context().getDevice().waitIdle();
@@ -91,7 +99,7 @@ int main()
     int width = 0, height = 0;
     glfwGetWindowSize(window, &width, &height);
     submitCtx->recreateSwapchain({.width = uint32_t(width), .height = uint32_t(height)});
-    cmdTracker.onSync();
+    etna::get_context().getQueueTrackingState().onWait();
   };
 
   while(!glfwWindowShouldClose(window)) {
@@ -104,9 +112,9 @@ int main()
       continue;
     }
 
-    auto cmd = submitCtx->acquireNextCmd();
-    cmd.begin(vk::CommandBufferBeginInfo {});
-    write_commands(cmd, cmdTracker, *backbuffer);
+    auto &cmd = submitCtx->acquireNextCmd();
+    cmd.begin();
+    write_commands(cmd, *backbuffer, pipeline);
     ETNA_ASSERT(cmd.end() == vk::Result::eSuccess);
     
     state = submitCtx->submitCmd(cmd, true);
