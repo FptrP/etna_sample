@@ -27,30 +27,6 @@ static std::optional<vk::UniqueSurfaceKHR> create_surface(GLFWwindow *window)
   return {};
 }
 
-static vk::UniqueCommandPool create_command_pool()
-{
-  vk::CommandPoolCreateInfo info {
-    .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-    .queueFamilyIndex = etna::get_context().getQueueFamilyIdx()
-  };
-
-  return etna::get_context().getDevice().createCommandPoolUnique(info).value;
-}
-
-static etna::SyncCommandBuffer make_util_cmd(vk::CommandPool pool)
-{
-  vk::CommandBufferAllocateInfo info {
-    .commandPool = pool,
-    .level = vk::CommandBufferLevel::ePrimary,
-    .commandBufferCount = 1
-  };
-
-  auto device = etna::get_context().getDevice();
-  auto apiCmd = std::move(device.allocateCommandBuffersUnique(info).value.at(0));
-  etna::SyncCommandBuffer cmd{std::move(apiCmd)};
-  return cmd; 
-}
-
 etna::Image load_image(etna::SyncCommandBuffer &cmd, std::string_view path)
 {
   int x, y, c;
@@ -90,8 +66,6 @@ void write_commands(etna::SyncCommandBuffer &cmd, const etna::Image &backbuffer,
     etna::Binding {0, texture.genBinding(sampler, vk::ImageLayout::eShaderReadOnlyOptimal)}
   });
   
-  cmd.bindDescriptorSet(vk::PipelineBindPoint::eGraphics, progInfo.getPipelineLayout(), 0, set);
-
   cmd.beginRendering({{0, 0}, {resolution.width, resolution.height}}, {
     etna::RenderingAttachment {
       .view = backbuffer.getView({}),
@@ -101,7 +75,8 @@ void write_commands(etna::SyncCommandBuffer &cmd, const etna::Image &backbuffer,
   });
 
   cmd.bindPipeline(pipeline);
-  
+  cmd.bindDescriptorSet(vk::PipelineBindPoint::eGraphics, progInfo.getPipelineLayout(), 0, set);
+
   cmd.setViewport(0, {
     vk::Viewport {
       .width = (float)resolution.width, 
@@ -117,7 +92,6 @@ void write_commands(etna::SyncCommandBuffer &cmd, const etna::Image &backbuffer,
 
   cmd.transformLayout(backbuffer, vk::ImageLayout::ePresentSrcKHR, {
     vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});
-
 }
 
 int main()
@@ -147,11 +121,10 @@ int main()
   auto submitCtx = etna::create_submit_context(surface.release(), {1024, 768});
   auto pipeline = create_pipeline(submitCtx->getSwapchainFmt());
 
-  auto utilPool = create_command_pool();
-  std::optional<etna::SyncCommandBuffer> cmd = make_util_cmd(*utilPool);
+  std::optional<etna::SyncCommandBuffer> cmd {submitCtx->getCommandPool()};
   
   auto texture = load_image(*cmd, "assets/brick.png"); 
-  auto sampler = etna::Sampler{etna::Sampler::CreateInfo {}};
+  auto sampler = etna::Sampler{etna::Sampler::CreateInfo {.filter = vk::Filter::eLinear }};
 
   auto swapchainRecreateCb = [&](const char *where) {
     etna::get_context().getDevice().waitIdle();
@@ -190,7 +163,6 @@ int main()
   
   texture.reset();
   cmd.reset();
-  utilPool.reset();
   submitCtx.reset();
   etna::shutdown();
 
