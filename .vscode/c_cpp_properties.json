@@ -3,7 +3,8 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/lib/tinygltf/**"
             ],
             "defines": ["VULKAN_HPP_NO_EXCEPTIONS", "VULKAN_HPP_NO_STRUCT_CONSTRUCTORS"],
             "compilerPath": "/usr/bin/gcc",

@@ -9,6 +9,15 @@ find_package(glfw3 3.3 REQUIRED)
 
 add_subdirectory(etna)
 
-add_executable(etna-sample src/main.cpp)
 
-target_link_libraries(etna-sample etna glfw)
+set(TINYGLTF_HEADER_ONLY ON CACHE INTERNAL "" FORCE)
+set(TINYGLTF_INSTALL OFF CACHE INTERNAL "" FORCE)
+add_subdirectory(lib/tinygltf)
+
+add_executable(etna-sample 
+  src/main.cpp
+  src/init.cpp
+  src/scene/GLTFScene.cpp
+  src/scene/SceneRenderer.cpp)
+
+target_link_libraries(etna-sample etna glfw tinygltf) 
