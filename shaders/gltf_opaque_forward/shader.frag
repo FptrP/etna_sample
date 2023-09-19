@@ -54,7 +54,8 @@ void main()
     V = normalize(-cameraPos);
 
   }
-
-  vec3 brdf = BRDF(N, V, L, baseColor, gFrame.sunColor.rgb, metallic, roughness); 
+  vec3 ambientLight = vec3(0.15, 0.15, 0.15);
+  vec3 brdf = BRDF(N, V, L, baseColor, gFrame.sunColor.rgb, ambientLight, metallic, roughness); 
+  brdf = pow(brdf, vec3(1/2.2));
   OUT_COLOR = vec4(brdf, 1.f);
 }

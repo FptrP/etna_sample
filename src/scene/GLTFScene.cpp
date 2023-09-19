@@ -93,8 +93,26 @@ static void generate_mips(etna::SyncCommandBuffer &cmd, const etna::Image &image
   }
 }
 
-static etna::Image load_image(etna::SyncCommandBuffer &cmd, const tinygltf::Image &src)
+static etna::Image load_image(etna::SyncCommandBuffer &cmd, const tinygltf::Image &src,
+  std::vector<etna::Buffer> &staging_buffers)
 {
+  uint32_t stagingMemSize = 0;
+  for (auto &buff : staging_buffers)
+  {
+    stagingMemSize += buff.getSize();
+  }
+
+  if (stagingMemSize >= 32 << 20)
+  {
+    cmd.end();
+    cmd.submit();
+    etna::get_context().getQueue().waitIdle();
+    staging_buffers.clear();
+    cmd.reset();
+    cmd.begin();
+  }
+
+
   auto image = etna::get_context().createImage(
     etna::ImageCreateInfo::image2D(src.width, src.height, vk::Format::eR8G8B8A8Unorm));
   
@@ -112,8 +130,8 @@ static etna::Image load_image(etna::SyncCommandBuffer &cmd, const tinygltf::Imag
   std::memcpy(ptr, src.image.data(), src.image.size() * sizeof(src.image[0]));
   stagingBuf.unmap();
 
-  cmd.reset();
-  cmd.begin();
+  //cmd.reset();
+  //cmd.begin();
 
   cmd.copyBufferToImage(stagingBuf, image, vk::ImageLayout::eTransferDstOptimal, {
     vk::BufferImageCopy {
@@ -127,11 +145,12 @@ static etna::Image load_image(etna::SyncCommandBuffer &cmd, const tinygltf::Imag
   });
 
   generate_mips(cmd, image);
-  cmd.end();
-  cmd.submit();
-  etna::get_context().getQueue().waitIdle();
+  //cmd.end();
+  //cmd.submit();
+  //etna::get_context().getQueue().waitIdle();
   
-  cmd.reset();
+  //cmd.reset();
+  staging_buffers.emplace_back(std::move(stagingBuf));
   return image;
 }
 
@@ -516,9 +535,19 @@ std::unique_ptr<GLTFScene> load_scene(const std::string &path, etna::SyncCommand
 
   if (model.images.size())
   {
+    cmd.reset();
+    cmd.begin();
+
+    std::vector<etna::Buffer> stagingBuffers;
     scene->images.reserve(model.images.size());
     for (auto &src : model.images)
-      scene->images.emplace_back(load_image(cmd, src));
+      scene->images.emplace_back(load_image(cmd, src, stagingBuffers));
+    
+    cmd.end();
+    cmd.submit();
+    etna::get_context().getQueue().waitIdle();
+    stagingBuffers.clear();
+    cmd.reset();
   }
 
   scene->stubTexture = create_stub_rexture(cmd);

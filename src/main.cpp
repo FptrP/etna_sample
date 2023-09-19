@@ -146,7 +146,7 @@ struct EtnaSampleApp : AppInit
     update_camera(getWindow(), camera, dt);
     gFrameConsts.setViewMatrix(camera.getViewMat());
     
-    gFrameConsts.setSunColor(glm::vec3 {1.5f, 1.5f, 1.5f});
+    gFrameConsts.setSunColor(glm::vec3 {5.f, 5.f, 5.f});
     gFrameConsts.setSunDirection(glm::vec3 {2.f, 1.f, 0.1f});
   }
 
@@ -163,10 +163,11 @@ private:
   Camera camera;
 };
 
-int main()
+int main(int argc, char **argv)
 {
   EtnaSampleApp etnaApp {1024, 768};
-  etnaApp.loadScene("assets/ABeautifulGame/ABeautifulGame.gltf");
+  //etnaApp.loadScene("assets/ABeautifulGame/ABeautifulGame.gltf");
+  etnaApp.loadScene("assets/FlightHelmet/FlightHelmet.gltf");
   etnaApp.mainLoop();
   return 0;
 }

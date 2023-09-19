@@ -50,7 +50,7 @@ vec3 BRDF_lambertian(vec3 f0, vec3 f90, vec3 diffuseColor, float specularWeight,
 }
 
 
-vec3 BRDF(vec3 N, vec3 V, vec3 L, vec3 baseColor, vec3 lightColor, float metallic, float roughness)
+vec3 BRDF(vec3 N, vec3 V, vec3 L, vec3 baseColor, vec3 lightColor, vec3 ambientLight, float metallic, float roughness)
 {
   vec3 H = normalize(L + V);
   vec3 F0 = mix(vec3(0.04), baseColor.rgb, metallic);
@@ -64,14 +64,14 @@ vec3 BRDF(vec3 N, vec3 V, vec3 L, vec3 baseColor, vec3 lightColor, float metalli
   vec3 lightIntensity = lightColor * NdotL;
 
   float specularWeight = 1.f;
-  vec3 cDiff = M_PI * mix(baseColor, vec3(0, 0, 0), metallic);
+  vec3 cDiff = mix(baseColor, vec3(0, 0, 0), metallic);
 
   vec3 brdfSpecular = BRDF_specularGGX(F0, F90, roughness, metallic,
    VdotH, NdotL, NdotV, NdotH);
   
   vec3 brdfLambertian = BRDF_lambertian(F0, F90, cDiff, specularWeight, VdotH);
 
-  return lightIntensity * (brdfSpecular + brdfLambertian);
+  return lightIntensity * (brdfSpecular + brdfLambertian) + ambientLight * cDiff;
 }
 
 #endif

@@ -168,12 +168,13 @@ void SceneRenderer::render(etna::SyncCommandBuffer &cmd,
       {
         auto &transform = scene.getTransform(tId);
         
-        auto normalMat = transform.normalTransform * glm::transpose(glm::inverse(gframe.getParams().view));
+        //auto normalMat = transform.normalTransform * glm::transpose(glm::inverse(gframe.getParams().view));
+        auto normalMat = glm::transpose(glm::inverse(gframe.getParams().view * transform.modelTransform));
 
         MaterialPushConstants mpc
         {
           .MVP = gframe.getParams().viewProjection * transform.modelTransform,
-          .normalsTransform = normalMat,//glm::transpose(glm::inverse(gframe.getParams().view * transform.modelTransform)),
+          .normalsTransform = normalMat,
           .baseColorFactor = material.baseColorFactor,
           .metallic = material.metallicFactor,
           .rougness = material.roughnessFactor,
