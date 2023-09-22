@@ -128,8 +128,16 @@ struct GLTFScene
     return materials.at(id);
   }
 
-  std::tuple<uint32_t, uint32_t> getImageSampler(uint32_t id) const {
+  std::tuple<uint32_t, uint32_t> getImageSamplerId(uint32_t id) const {
     return imageSamplers.at(id);
+  }
+
+  std::tuple<const etna::Image*, vk::Sampler> getImageSampler(std::optional<uint32_t> tex_id) const
+  {
+    if (!tex_id)
+      return {&stubTexture.value(), samplers.at(0).get()};
+    auto [imageId, smpId] = getImageSamplerId(*tex_id); 
+    return {&images.at(imageId), samplers.at(smpId).get()};
   }
 
   const etna::Image &getImage(uint32_t id) const {

@@ -16,7 +16,7 @@
 #include "scene/Camera.hpp"
 #include "scene/GLTFScene.hpp"
 #include "scene/SceneRenderer.hpp"
-
+#include "scene/ABufferRenderer.hpp"
 #include "app.hpp"
 
 
@@ -24,6 +24,8 @@ static void update_camera(GLFWwindow *window, Camera &camera, float dt)
 {
   static std::optional<double> cursorX = std::nullopt;
   static std::optional<double> cursorY = std::nullopt;
+  static bool isCursorCaptured = false;
+
 
   glm::vec3 movement{0.f, 0.f, 0.f};
   if (glfwGetKey(window, GLFW_KEY_W))
@@ -35,14 +37,20 @@ static void update_camera(GLFWwindow *window, Camera &camera, float dt)
   if (glfwGetKey(window, GLFW_KEY_A))
     movement.x -= 0.35;
 
+  if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS)
+    isCursorCaptured = !isCursorCaptured;
+
   camera.move(movement * dt);
 
   double nX, nY;
   glfwGetCursorPos(window, &nX, &nY);
 
-  if (cursorX.has_value() && cursorY.has_value())
-    camera.rotate(0.1 * (nX - *cursorX), -0.1 * (nY - *cursorY));
-  
+  if (isCursorCaptured)
+  {
+    if (cursorX.has_value() && cursorY.has_value())
+      camera.rotate(0.1 * (nX - *cursorX), -0.1 * (nY - *cursorY));
+  }
+
   cursorX = nX;
   cursorY = nY;
 }
@@ -67,21 +75,38 @@ struct EtnaSampleApp : AppInit
       depthRT.getInfo().format
     };
     
-    etna::create_program("mesh", {
-      "shaders/simple_mesh/shader.vert.spv",
-      "shaders/simple_mesh/shader.frag.spv"
-    });
-
     etna::create_program("gltf_opaque_forward", {
       "shaders/gltf_opaque_forward/shader.vert.spv",
       "shaders/gltf_opaque_forward/shader.frag.spv"
     });
 
+    etna::create_program("abuffer_render", {
+      "shaders/abuffer_render/shader.vert.spv",
+      "shaders/abuffer_render/shader.frag.spv"
+    });
+
+    etna::create_program("abuffer_resolve", {
+      "shaders/abuffer_resolve/shader.comp.spv"
+    });
+
+    etna::create_program("fullscreen_blend", {
+      "shaders/fullscreen_blend/shader.vert.spv",
+      "shaders/fullscreen_blend/shader.frag.spv"
+    });
+    
+
+    glm::uvec2 resolution {depthRT.getInfo().extent.width, depthRT.getInfo().extent.height};
+
     opaqueRenderer = std::make_unique<scene::SceneRenderer>("gltf_opaque_forward", rtInfo);
+    abufferRenderer = std::make_unique<scene::ABufferRenderer>("abuffer_render", depthRT);
+    abufferResolver = std::make_unique<scene::ABufferResolver>("abuffer_resolve", resolution);
 
     utilCmd.emplace(getSubmitCtx().getCommandPool());
     scene = scene::load_scene(path, *utilCmd);
     opaqueRenderer->attachToScene(*scene);
+    abufferRenderer->attachToScene(*scene);
+
+    texBlender = std::make_unique<scene::TexBlender>("fullscreen_blend", rtInfo.colorRT[0]);
   }
 
   void onResolutionChanged(uint32_t new_width, uint32_t new_height) override
@@ -91,6 +116,9 @@ struct EtnaSampleApp : AppInit
     depthRT = etna::get_context().createImage(
       etna::ImageCreateInfo::depthRT(new_width, new_height, vk::Format::eD24UnormS8Uint)  
     );
+
+    abufferRenderer->onResolutionChanged(new_width, new_height);
+    abufferResolver->onResolutionChanged({new_width, new_height});
   }
   
   void recordRenderCmd(etna::SyncCommandBuffer &cmd, const etna::Image &backbuffer) override
@@ -134,6 +162,11 @@ struct EtnaSampleApp : AppInit
     
     cmd.endRendering();
 
+    abufferRenderer->render(cmd, depthRT, gFrameConsts, *scene);
+    abufferResolver->dispatch(cmd, gFrameConsts, abufferRenderer->getListHead(), abufferRenderer->getListBuffer());
+
+    texBlender->blend(cmd, abufferResolver->getTarget(), backbuffer);
+
     cmd.transformLayout(backbuffer, vk::ImageLayout::ePresentSrcKHR, {
       vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});
 
@@ -159,7 +192,9 @@ private:
 
   std::unique_ptr<scene::GLTFScene> scene;
   std::unique_ptr<scene::SceneRenderer> opaqueRenderer;
-
+  std::unique_ptr<scene::ABufferRenderer> abufferRenderer;
+  std::unique_ptr<scene::ABufferResolver> abufferResolver;
+  std::unique_ptr<scene::TexBlender> texBlender;
   Camera camera;
 };
 

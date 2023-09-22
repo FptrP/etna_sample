@@ -18,6 +18,7 @@ add_executable(etna-sample
   src/main.cpp
   src/init.cpp
   src/scene/GLTFScene.cpp
-  src/scene/SceneRenderer.cpp)
+  src/scene/SceneRenderer.cpp
+  src/scene/ABufferRenderer.cpp)
 
 target_link_libraries(etna-sample etna glfw tinygltf) 

@@ -103,7 +103,7 @@ get_image_texture(const GLTFScene &scene, std::optional<uint32_t> texid)
 
   if (texid.has_value())
   {
-    auto [tex, smp] = scene.getImageSampler(*texid);
+    auto [tex, smp] = scene.getImageSamplerId(*texid);
     image = &scene.getImage(tex);
     sampler = scene.getSampler(smp);
   }

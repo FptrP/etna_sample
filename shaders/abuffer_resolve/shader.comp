@@ -1,0 +1,126 @@
+#version 460
+#extension GL_GOOGLE_include_directive : enable
+
+#include "../include/ABuffer.glsl"
+#include "../include/GLTFMaterial.glsl"
+
+layout (set = 0, binding = 0) uniform GlobalParams
+{
+  GlobalFrameParams gFrame;
+};
+
+layout (set = 0, binding = 1, r32ui) uniform uimage2D LIST_HEAD_TEX; 
+
+layout (set = 0, binding = 2, std430) buffer FragmentListBuffer
+{
+  uint fragmentsCounter;
+  FragmentEntry entries[];
+} gList;
+
+layout (set = 0, binding = 3, rgba8) uniform image2D TRANSPERENCY_TEX;
+
+vec4 resolveAbuffer(uint head);
+
+layout (local_size_x = 8, local_size_y = 4) in;
+void main()
+{
+  ivec2 resolution = ivec2(gFrame.viewport.xy);
+  ivec2 pixelPos = ivec2(gl_WorkGroupID.xy * gl_WorkGroupSize.xy + gl_LocalInvocationID.xy);
+  
+  if (any(greaterThanEqual(pixelPos, resolution)))
+  {
+    imageStore(TRANSPERENCY_TEX, pixelPos, vec4(0, 0, 0, 0));
+    return;
+  }
+
+  uint listHead = imageLoad(LIST_HEAD_TEX, pixelPos).x;
+  
+  if (listHead == ABUFFER_LIST_END)
+  {
+    imageStore(TRANSPERENCY_TEX, pixelPos, vec4(0, 0, 0, 0));
+    return;
+  }
+
+  vec4 res = resolveAbuffer(listHead);
+
+  imageStore(TRANSPERENCY_TEX, pixelPos, res); 
+}
+
+struct PackedSample
+{
+  float depth;
+  uint packedColor;
+};
+
+void swap_samples(inout PackedSample s1, inout PackedSample s2)
+{
+  PackedSample tmp = s1;
+  s1 = s2;
+  s2 = tmp;
+}
+
+vec4 resolveAbuffer(uint head)
+{
+  const uint MAX_SAMPLES = 8;
+  PackedSample samples[MAX_SAMPLES];
+
+  for (uint i = 0; i < MAX_SAMPLES; i++)
+    samples[i] = PackedSample(1.f, 0u);
+
+  uint sampleCount = 0;
+
+  while (head != ABUFFER_LIST_END)
+  {
+    FragmentEntry entry = gList.entries[head];
+    samples[sampleCount].depth = entry.depth;
+    samples[sampleCount].packedColor = entry.packedColor;
+    head = entry.next;
+    sampleCount++;
+  }
+
+  for (uint s = 0; s < sampleCount; s++)
+  {
+    uint minIndex = s;
+    float minDepth = samples[minIndex].depth;
+    
+    for (uint i = minIndex + 1; i < sampleCount; i++)
+    {
+      if (samples[i].depth < minDepth)
+      {
+        minDepth = samples[i].depth;
+        minIndex = i;
+      }
+    }
+
+    if (minIndex != s)
+    {
+      swap_samples(samples[s], samples[minIndex]);
+    }
+  }
+
+  vec3 accum = vec3(0, 0, 0);
+  float alpha = 0.f;
+
+  for (int i = int(sampleCount) - 1; i >= 0; i--)
+  {
+    vec4 color_alpha = unpackUnorm4x8(samples[i].packedColor);
+    accum = color_alpha.rgb * color_alpha.a + (1 - alpha) * accum;
+    alpha = color_alpha.a + alpha * (1 - color_alpha.a);
+  }
+  // c1 a1
+  // c2 a2
+  // bg
+
+  // accum = (c2 * a2)
+  // a = a2
+
+  // accum = c1 * a1 + (1 - a1) * (c2 * a2)
+  // a = a1 + a2 * (1 - a1)
+
+  // bg = 
+
+  return vec4(accum, alpha); 
+}
+
+// over c1 a1 c2 = c1 * a1 + (1 - a1) * c2
+//
