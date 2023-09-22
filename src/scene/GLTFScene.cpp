@@ -444,8 +444,7 @@ std::unique_ptr<GLTFScene> load_scene(const std::string &path, etna::SyncCommand
   std::string err;
   std::string warn;
 
-  if (!loader.LoadASCIIFromFile(&model, &err, &warn, path))
-    ETNA_ASSERT(0);
+  auto ret = loader.LoadASCIIFromFile(&model, &err, &warn, path);
 
   if (!err.empty())
     ETNA_ASSERTF(false, "GLTF error : {}", err);
@@ -453,6 +452,7 @@ std::unique_ptr<GLTFScene> load_scene(const std::string &path, etna::SyncCommand
   if (!warn.empty())
     spdlog::warn("GLTF warings : {}", warn);
 
+  ETNA_ASSERT(ret);
   
   std::vector<Vertex> vertexData;
   std::vector<uint32_t> indexData;

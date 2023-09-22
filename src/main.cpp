@@ -202,7 +202,8 @@ int main(int argc, char **argv)
 {
   EtnaSampleApp etnaApp {1024, 768};
   //etnaApp.loadScene("assets/ABeautifulGame/ABeautifulGame.gltf");
-  etnaApp.loadScene("assets/FlightHelmet/FlightHelmet.gltf");
+  etnaApp.loadScene("assets/ABeautifulGame/ABeautifulGame_transperent.gltf");
+  //etnaApp.loadScene("assets/FlightHelmet/FlightHelmet.gltf");
   etnaApp.mainLoop();
   return 0;
 }

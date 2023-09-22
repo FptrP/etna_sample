@@ -107,19 +107,8 @@ vec4 resolveAbuffer(uint head)
     accum = color_alpha.rgb * color_alpha.a + (1 - alpha) * accum;
     alpha = color_alpha.a + alpha * (1 - color_alpha.a);
   }
-  // c1 a1
-  // c2 a2
-  // bg
 
-  // accum = (c2 * a2)
-  // a = a2
-
-  // accum = c1 * a1 + (1 - a1) * (c2 * a2)
-  // a = a1 + a2 * (1 - a1)
-
-  // bg = 
-
-  return vec4(accum, alpha); 
+  return vec4(pow(accum, vec3(1/2.2)), alpha); 
 }
 
 // over c1 a1 c2 = c1 * a1 + (1 - a1) * c2

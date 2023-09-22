@@ -127,9 +127,6 @@ void ABufferRenderer::render(etna::SyncCommandBuffer &cmd,
   const GlobalFrameConstantHandler &gframe,
   const GLTFScene &scene)
 {
-  if (!sceneData.materialGropus.size())
-    return;
-
   vk::ClearColorValue clearVal {};
   clearVal.setUint32({ABUFFER_LIST_END, ABUFFER_LIST_END, ABUFFER_LIST_END, ABUFFER_LIST_END});
   cmd.clearColorImage(listHead, vk::ImageLayout::eGeneral, clearVal, {
@@ -137,6 +134,9 @@ void ABufferRenderer::render(etna::SyncCommandBuffer &cmd,
   });
 
   cmd.fillBuffer(fragmentList, 0, sizeof(uint32_t), 0u);
+
+  if (!sceneData.materialGropus.size())
+    return;
 
   vk::Extent2D extent {
     depthRT.getInfo().extent.width, 

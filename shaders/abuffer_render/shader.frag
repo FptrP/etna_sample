@@ -50,8 +50,8 @@ void main()
   if ((renderFlags & RF_NO_BASECOLOR_TEX) == 0)
   {
     vec4 s = texture(BASE_COLOR_TEX, IN_UV).rgba;
-    baseColor = s.rgb;
-    alpha = s.a;
+    baseColor *= s.rgb;
+    alpha *= s.a;
   }
 
   vec3 N = normalize(IN_NORM);
