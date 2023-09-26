@@ -22,6 +22,7 @@ struct Vertex
   glm::vec2 uv;
 
   static etna::VertexShaderInputDescription getDesc();
+  static etna::VertexShaderInputDescription getDescPosOnly();
 };
 
 struct SortedScene

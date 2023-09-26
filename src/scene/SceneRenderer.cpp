@@ -31,6 +31,26 @@ void GlobalFrameConstantHandler::makeProjection(float fovy, float aspect, float 
   params.projection = vk_perspective(fovy, aspect, znear, zfar);
 }
 
+void GlobalFrameConstantHandler::updateFov(float fovy)
+{
+  params.projectionParams.x = std::tan(fovy/2.f);
+  params.projection = vk_perspective(
+    params.projectionParams.x,
+    params.projectionParams.y,
+    params.projectionParams.z,
+    params.projectionParams.w);
+}
+
+void GlobalFrameConstantHandler::updateAspect(float aspect)
+{
+  params.projectionParams.y = aspect;
+  params.projection = vk_perspective(
+    params.projectionParams.x,
+    params.projectionParams.y,
+    params.projectionParams.z,
+    params.projectionParams.w);
+}
+
 void GlobalFrameConstantHandler::setViewport(uint32_t width, uint32_t height)
 {
   params.viewport = glm::vec4(float(width), float(height), 0.f, 0.f);
@@ -61,12 +81,15 @@ void GlobalFrameConstantHandler::onEndFrame() //next index;
 }
 
 
-SceneRenderer::SceneRenderer(const std::string &prog_name, const RenderTargetInfo &rtInfo)
+SceneRenderer::SceneRenderer(const std::string &prog_name,
+  const std::string &depth_prog_name,
+  const RenderTargetInfo &rtInfo)
   : program {etna::get_shader_program(prog_name).getId() }
 {
   etna::GraphicsPipeline::CreateInfo info {};
   info.vertexShaderInput = scene::Vertex::getDesc();
-
+  info.depthConfig.depthCompareOp = vk::CompareOp::eEqual;
+  info.depthConfig.depthWriteEnable = VK_FALSE;
   info.blendingConfig.attachments.clear();
 
   vk::PipelineColorBlendAttachmentState blendState {
@@ -83,9 +106,16 @@ SceneRenderer::SceneRenderer(const std::string &prog_name, const RenderTargetInf
 
   info.fragmentShaderOutput.depthAttachmentFormat = rtInfo.depthRT;
 
-  // 1 sided and 2 sided materials
-  // alpha cutoff? 
   pipeline = etna::get_context().getPipelineManager().createGraphicsPipeline(prog_name, info);
+
+  //depth prepass
+  info.vertexShaderInput = scene::Vertex::getDescPosOnly();
+  info.blendingConfig.attachments.clear();
+  info.fragmentShaderOutput.colorAttachmentFormats.clear();
+  info.depthConfig.depthWriteEnable = VK_TRUE;
+  info.depthConfig.depthCompareOp = vk::CompareOp::eLessOrEqual;
+
+  depthPipeline = etna::get_context().getPipelineManager().createGraphicsPipeline(depth_prog_name, info);
 }
 
 void SceneRenderer::attachToScene(const GLTFScene &scene)
@@ -150,6 +180,30 @@ uint32_t SceneRenderer::bindDS(
   cmd.bindDescriptorSet(vk::PipelineBindPoint::eGraphics, info.getPipelineLayout(), 0, set);
 
   return renderFlags;
+}
+
+void SceneRenderer::depthPrepass(etna::SyncCommandBuffer &cmd, 
+  const GlobalFrameConstantHandler &gframe, const GLTFScene &scene)
+{
+  //expect cmd in render state, binded scene vertex/index buffers
+  cmd.bindPipeline(depthPipeline);
+  auto progInfo = etna::get_shader_program(pipeline.getShaderProgram());
+
+  for (auto &group : sceneData.materialGropus)
+  {    
+    for (auto &dc : group.drawCalls)
+    {
+      for (auto &tId : dc.transformIds)
+      {
+        auto &transform = scene.getTransform(tId);
+        auto normalMat = glm::transpose(glm::inverse(gframe.getParams().view * transform.modelTransform));
+        auto MVP = gframe.getParams().viewProjection * transform.modelTransform;
+        cmd.pushConstants(pipeline.getShaderProgram(), 0, MVP);
+        cmd.drawIndexed(dc.indexCount, 1, dc.firstIndex, dc.vertexOffset, 0);
+      }
+    }
+  }
+
 }
 
 void SceneRenderer::render(etna::SyncCommandBuffer &cmd, 

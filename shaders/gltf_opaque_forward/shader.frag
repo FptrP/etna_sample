@@ -5,6 +5,8 @@
 #include "../include/coords.glsl"
 #include "../include/BRDF.glsl"
 
+layout(early_fragment_tests) in;
+
 layout (location = 0) in vec2 IN_UV;
 layout (location = 1) in vec3 IN_NORM;
 

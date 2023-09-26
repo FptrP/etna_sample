@@ -226,8 +226,8 @@ TexBlender::TexBlender(const std::string &name, vk::Format dstFmt)
     .srcColorBlendFactor = vk::BlendFactor::eSrcColor,
     .dstColorBlendFactor = vk::BlendFactor::eDstColor,
     .colorBlendOp = vk::BlendOp::eAdd,
-    .srcAlphaBlendFactor = vk::BlendFactor::eOne,
-    .dstAlphaBlendFactor = vk::BlendFactor::eOne,
+    .srcAlphaBlendFactor = vk::BlendFactor::eSrcAlpha,
+    .dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
     .alphaBlendOp = vk::BlendOp::eAdd,
     .colorWriteMask = vk::ColorComponentFlagBits::eR|vk::ColorComponentFlagBits::eG|vk::ColorComponentFlagBits::eB|vk::ColorComponentFlagBits::eA
   };

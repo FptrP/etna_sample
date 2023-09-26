@@ -6,7 +6,7 @@
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/lib/tinygltf/**"
             ],
-            "defines": ["VULKAN_HPP_NO_EXCEPTIONS", "VULKAN_HPP_NO_STRUCT_CONSTRUCTORS"],
+            "defines": ["VULKAN_HPP_NO_EXCEPTIONS", "VULKAN_HPP_NO_STRUCT_CONSTRUCTORS", "IMGUI_IMPL_API"],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c17",
             "cppStandard": "c++20",

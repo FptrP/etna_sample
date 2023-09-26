@@ -8,7 +8,9 @@
 #include <etna/SyncCommandBuffer.hpp>
 #include <etna/Sampler.hpp>
 
-#include <GLFW/glfw3.h>
+#include <SDL2/SDL.h>
+
+#include "imgui_ctx.hpp"
 
 struct AppInit
 {
@@ -23,7 +25,9 @@ struct AppInit
 
 protected:
   etna::SimpleSubmitContext &getSubmitCtx() { return *submitCtx; }
-  GLFWwindow *getWindow() { return window.get(); }
+  SDL_Window *getWindow() { return window.get(); }
+
+  void drawImGui(etna::SyncCommandBuffer &cmd, const etna::Image &backbuffer);
 
 private:
   struct EtnaDeleter
@@ -33,24 +37,25 @@ private:
 
   struct WindowDeleter
   {
-    void operator()(GLFWwindow *window)
+    void operator()(SDL_Window *window)
     {
       if (window)
-        glfwDestroyWindow(window);
+        SDL_DestroyWindow(window);
     }
   };
 
-  struct GLFWDeleter {
-    ~GLFWDeleter()
-    {
-      glfwTerminate(); 
+  struct SDLDeleter
+  {
+    ~SDLDeleter() {
+      SDL_Quit();
     }
   };
 
-  GLFWDeleter gltfDeleter;
-  std::unique_ptr<GLFWwindow, WindowDeleter> window {nullptr};
+  SDLDeleter sdlDeleter;
+  std::unique_ptr<SDL_Window, WindowDeleter> window {nullptr};
   EtnaDeleter etnaDeleter;
   std::unique_ptr<etna::SimpleSubmitContext> submitCtx;  
+  std::unique_ptr<ImguiInitilizer> imguiCtx;
 };
 
 

@@ -49,6 +49,30 @@ etna::VertexShaderInputDescription Vertex::getDesc()
   return desc;
 }
 
+etna::VertexShaderInputDescription Vertex::getDescPosOnly()
+{
+  etna::VertexByteStreamFormatDescription bufDesc {
+    .stride = sizeof(Vertex),
+    .attributes {
+      {
+        .format = vk::Format::eR32G32B32Sfloat,
+        .offset = offsetof(Vertex, pos)
+      }
+    }
+  };
+
+  etna::VertexShaderInputDescription desc {
+    .bindings { 
+      etna::VertexShaderInputDescription::Binding {
+        .byteStreamDescription = bufDesc,
+        .attributeMapping = bufDesc.identityAttributeMapping()
+      }
+    }
+  };
+
+  return desc;
+}
+
 static void generate_mips(etna::SyncCommandBuffer &cmd, const etna::Image &image)
 {
   uint32_t mipLevels = image.getInfo().mipLevels;

@@ -30,6 +30,9 @@ struct GlobalFrameConstantHandler
   void setSunColor(glm::vec3 color);
   void setSunDirection(glm::vec3 dir);
   
+  void updateFov(float fovy);
+  void updateAspect(float aspect);
+  
   void onBeginFrame(); //write data to const buffer
   void onEndFrame(); //next index;
 
@@ -88,9 +91,14 @@ struct MaterialPushConstants
 
 struct SceneRenderer
 {
-  SceneRenderer(const std::string &prog_name, const RenderTargetInfo &rtInfo);
+  SceneRenderer(const std::string &prog_name, 
+    const std::string &depth_prog_name,
+    const RenderTargetInfo &rtInfo);
 
   void attachToScene(const GLTFScene &scene);
+  
+  void depthPrepass(etna::SyncCommandBuffer &cmd, 
+    const GlobalFrameConstantHandler &gframe, const GLTFScene &scene);
 
   void render(etna::SyncCommandBuffer &cmd, 
     const GlobalFrameConstantHandler &gframe, const GLTFScene &scene);
@@ -103,6 +111,7 @@ private:
     const GLTFScene &scene);
 
   etna::ShaderProgramId program;
+  etna::GraphicsPipeline depthPipeline;
   etna::GraphicsPipeline pipeline;
   SortedScene sceneData;
 };
