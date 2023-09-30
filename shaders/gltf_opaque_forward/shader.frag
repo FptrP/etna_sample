@@ -9,6 +9,8 @@ layout(early_fragment_tests) in;
 
 layout (location = 0) in vec2 IN_UV;
 layout (location = 1) in vec3 IN_NORM;
+layout (location = 2) in vec4 IN_CURR_POS;
+layout (location = 3) in vec4 IN_PREV_POS;
 
 layout (set = 0, binding = 0) uniform UboData
 {
@@ -24,6 +26,7 @@ layout (set = 0, binding = 1) uniform sampler2D BASE_COLOR_TEX;
 layout (set = 0, binding = 2) uniform sampler2D METALLIC_ROUGHNESS_TEX;
 
 layout (location = 0) out vec4 OUT_COLOR;
+layout (location = 1) out vec2 OUT_VELOCITY;
 
 void main()
 {
@@ -60,4 +63,8 @@ void main()
   vec3 brdf = BRDF(N, V, L, baseColor, gFrame.sunColor.rgb, ambientLight, metallic, roughness); 
   brdf = pow(brdf, vec3(1/2.2));
   OUT_COLOR = vec4(brdf, 1.f);
+
+  vec2 currUv = 0.5 * (IN_CURR_POS.xy/IN_CURR_POS.w) + vec2(0.5, 0.5);
+  vec2 prevUv = 0.5 * (IN_PREV_POS.xy/IN_PREV_POS.w) + vec2(0.5, 0.5);
+  OUT_VELOCITY = currUv - prevUv;
 }

@@ -2,7 +2,7 @@
 #define SCENE_RENDERER_HPP_INCLUDED
 
 #include <etna/Etna.hpp>
-
+#include <array>
 #include "GLTFScene.hpp"
 
 namespace scene
@@ -14,6 +14,7 @@ struct GlobalFrameConstants
   glm::mat4 view; // TODO: inverseView
   glm::mat4 projection;
   glm::mat4 viewProjection;
+  glm::mat4 prevViewProjection;
   glm::vec4 projectionParams; //tg(fovy/2), aspect, znear, zfar
   glm::vec4 sunDirection; // camera space
   glm::vec4 sunColor;
@@ -53,11 +54,15 @@ struct GlobalFrameConstantHandler
     return constantUbo.genBinding(getUBOoffset(), paramsGpuSize);
   }
 
+  bool getInvalidateHistory() const { return invalidateHistory; }
+
 private:
   GlobalFrameConstants params;
 
   uint32_t numFrames;
   uint32_t frameIndex = 0;
+
+  bool invalidateHistory = true;
 
   uint32_t paramsGpuSize;
 
@@ -76,9 +81,40 @@ struct RenderTargetInfo
   vk::Format depthRT;
 };
 
+struct RenderTargetState
+{
+  RenderTargetState(uint32_t w, uint32_t h);
+
+  void onResolutionChanged(uint32_t new_w, uint32_t new_h);
+
+  const etna::Image &getDepth() const { return depth[historyIndex]; }
+  const etna::Image &getColor() const { return currentColor; }
+  const etna::Image &getVelocity() const { return velocity; }
+  const etna::Image &getTAATarget() const {return color[historyIndex]; }
+
+  const etna::Image &getDepthHistory() const { return depth[(historyIndex + 1) % 2]; }
+  const etna::Image &getColorHistory() const { return color[(historyIndex + 1) % 2]; }
+
+  vk::Format getDepthFmt() const { return depth[historyIndex].getInfo().format; }
+  vk::Format getColorFmt() const { return color[historyIndex].getInfo().format; }
+  vk::Format getVelocityFmt() const { return velocity.getInfo().format; }
+
+  static constexpr vk::Format baseColorFmt = vk::Format::eR8G8B8A8Unorm;
+
+  void nextFrame() { historyIndex = (historyIndex + 1) % 2; }
+  
+private:
+  uint32_t historyIndex = 0;
+  std::array<etna::Image, 2> depth;
+  std::array<etna::Image, 2> color;
+  etna::Image velocity;
+  etna::Image currentColor;
+};
+
 struct MaterialPushConstants
 {
   glm::mat4 MVP;
+  glm::mat4 prevMVP;
   glm::mat4 normalsTransform;
   glm::vec4 baseColorFactor;
   float metallic;
@@ -86,6 +122,8 @@ struct MaterialPushConstants
   float alphaCutoff;
   uint32_t renderFlags;
 };
+
+static_assert(sizeof(MaterialPushConstants) <= 256);
 
 //base layout
 

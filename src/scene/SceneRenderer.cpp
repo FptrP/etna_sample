@@ -33,6 +33,7 @@ void GlobalFrameConstantHandler::makeProjection(float fovy, float aspect, float 
 
 void GlobalFrameConstantHandler::updateFov(float fovy)
 {
+  invalidateHistory = true;
   params.projectionParams.x = std::tan(fovy/2.f);
   params.projection = vk_perspective(
     params.projectionParams.x,
@@ -43,6 +44,7 @@ void GlobalFrameConstantHandler::updateFov(float fovy)
 
 void GlobalFrameConstantHandler::updateAspect(float aspect)
 {
+  invalidateHistory = true;
   params.projectionParams.y = aspect;
   params.projection = vk_perspective(
     params.projectionParams.x,
@@ -54,6 +56,7 @@ void GlobalFrameConstantHandler::updateAspect(float aspect)
 void GlobalFrameConstantHandler::setViewport(uint32_t width, uint32_t height)
 {
   params.viewport = glm::vec4(float(width), float(height), 0.f, 0.f);
+  invalidateHistory = true;
 }
 
 void GlobalFrameConstantHandler::setSunColor(glm::vec3 color)
@@ -70,6 +73,12 @@ void GlobalFrameConstantHandler::setSunDirection(glm::vec3 dir)
 void GlobalFrameConstantHandler::onBeginFrame() //write data to const buffer
 {
   params.viewProjection = params.projection * params.view;
+
+  if (invalidateHistory)
+  {
+    params.prevViewProjection = params.viewProjection;
+  }
+
   auto ptr = constantUbo.map();
   memcpy(ptr + frameIndex * paramsGpuSize, &params, sizeof(params));
   constantUbo.unmap();
@@ -77,9 +86,35 @@ void GlobalFrameConstantHandler::onBeginFrame() //write data to const buffer
 
 void GlobalFrameConstantHandler::onEndFrame() //next index;
 {
+  params.prevViewProjection = params.viewProjection;
   frameIndex = (frameIndex + 1) % numFrames;
+  if (invalidateHistory)
+    spdlog::warn("History invalidate");
+    
+  invalidateHistory = false;
 }
 
+
+RenderTargetState::RenderTargetState(uint32_t w, uint32_t h)
+{
+  onResolutionChanged(w, h);
+}
+
+void RenderTargetState::onResolutionChanged(uint32_t new_w, uint32_t new_h)
+{
+  for (uint32_t i = 0; i < 2; i++)
+  {
+    depth[i] = etna::get_context().createImage(
+    etna::ImageCreateInfo::depthRT(new_w, new_h, vk::Format::eD24UnormS8Uint));
+    color[i] = etna::get_context().createImage(
+      etna::ImageCreateInfo::colorRT(new_w, new_h, vk::Format::eR8G8B8A8Unorm));
+  }
+  currentColor = etna::get_context().createImage(
+      etna::ImageCreateInfo::colorRT(new_w, new_h, vk::Format::eR8G8B8A8Unorm));
+
+  velocity = etna::get_context().createImage(
+    etna::ImageCreateInfo::colorRT(new_w, new_h, vk::Format::eR16G16Sfloat));  
+}
 
 SceneRenderer::SceneRenderer(const std::string &prog_name,
   const std::string &depth_prog_name,
@@ -228,6 +263,7 @@ void SceneRenderer::render(etna::SyncCommandBuffer &cmd,
         MaterialPushConstants mpc
         {
           .MVP = gframe.getParams().viewProjection * transform.modelTransform,
+          .prevMVP = gframe.getParams().prevViewProjection * transform.modelTransform,
           .normalsTransform = normalMat,
           .baseColorFactor = material.baseColorFactor,
           .metallic = material.metallicFactor,

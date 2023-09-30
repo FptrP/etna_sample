@@ -1,0 +1,47 @@
+#version 460
+#extension GL_GOOGLE_include_directive : enable
+
+#include "../include/GLTFMaterial.glsl"
+#include "../include/coords.glsl"
+
+layout (push_constant) uniform PushData
+{
+  vec2 jitter;
+  vec2 prevJitter;
+};
+
+layout (set = 0, binding = 0) uniform sampler2D COLOR_TEX;
+layout (set = 0, binding = 1) uniform sampler2D DEPTH_TEX;
+layout (set = 0, binding = 2) uniform sampler2D VELOCITY_TEX;
+
+layout (set = 0, binding = 3) uniform sampler2D HISTORY_COLOR_TEX;
+layout (set = 0, binding = 4) uniform sampler2D HISTORY_DEPTH_TEX;
+
+layout (set = 0, binding = 5, rgba8) uniform image2D OUT_TARGET; 
+
+layout (local_size_x = 8, local_size_y = 4) in;
+void main()
+{
+  ivec2 pixelPos = ivec2(gl_WorkGroupID.xy * gl_WorkGroupSize.xy + gl_LocalInvocationID.xy);
+  ivec2 texSize = textureSize(COLOR_TEX, 0);
+  
+  if (any(greaterThanEqual(pixelPos, texSize)))
+    return;
+
+  vec2 uv = (pixelPos + vec2(0.5, 0.5))/texSize; 
+
+  vec3 currentColor = texture(COLOR_TEX, uv).rgb;
+  vec2 velocity = texture(VELOCITY_TEX, uv).rg;
+
+  vec2 prevUV = uv - velocity;
+
+  if (any(lessThan(uv, vec2(0, 0))) || any(greaterThanEqual(uv, vec2(1, 1))))
+  {
+    imageStore(OUT_TARGET, pixelPos, vec4(currentColor, 0));
+    return;
+  } 
+
+  vec3 historyColor = texture(HISTORY_COLOR_TEX, prevUV).rgb;
+  vec3 resultColor = mix(historyColor, currentColor, 0.05);
+  imageStore(OUT_TARGET, pixelPos, vec4(resultColor, 0));
+}

@@ -21,7 +21,8 @@ add_executable(etna-sample
   src/events/events.cpp
   src/scene/GLTFScene.cpp
   src/scene/SceneRenderer.cpp
-  src/scene/ABufferRenderer.cpp)
+  src/scene/ABufferRenderer.cpp
+  src/renderer/TAA.cpp)
 
 target_include_directories(etna-sample PRIVATE src)
 target_link_libraries(etna-sample etna tinygltf imgui SDL2::SDL2) 

@@ -5,7 +5,7 @@
 #include <SDL2/SDL_vulkan.h>
 
 #include <etna/RenderTargetStates.hpp>
-
+#include "scene/SceneRenderer.hpp"
 #include "app_events.hpp"
 
 struct GuiSystem
@@ -14,13 +14,16 @@ struct GuiSystem
   {
     cb = event::make_handle();
     cb.addCallback<KeyPressedEvent>([this](const KeyPressedEvent &evt) {
-      if (evt.key == SDLK_f && !evt.repeat)
+      if (evt.key == SDLK_g && !evt.repeat)
         mainWindowEnabled = !mainWindowEnabled;
     });
   }
 
   void drawUI()
   {
+    if (!mainWindowEnabled)
+      return;
+
     ImGui::Begin("Main window");
     event::send_event_immediate(GuiRenderEvent{});
     ImGui::End();
@@ -83,7 +86,7 @@ AppInit::AppInit(uint32_t init_width, uint32_t init_height)
 
   imguiCtx = std::make_unique<ImguiInitilizer>(
     window.get(), 
-    submitCtx->getSwapchainFmt(),
+    scene::RenderTargetState::baseColorFmt,
     submitCtx->getBackbuffersCount());
   
   auto uploadCmd = submitCtx->getCommandPool().allocate();
