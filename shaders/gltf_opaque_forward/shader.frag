@@ -61,10 +61,10 @@ void main()
   }
   vec3 ambientLight = vec3(0.15, 0.15, 0.15);
   vec3 brdf = BRDF(N, V, L, baseColor, gFrame.sunColor.rgb, ambientLight, metallic, roughness); 
-  brdf = pow(brdf, vec3(1/2.2));
+
   OUT_COLOR = vec4(brdf, 1.f);
 
-  vec2 currUv = 0.5 * (IN_CURR_POS.xy/IN_CURR_POS.w) + vec2(0.5, 0.5);
-  vec2 prevUv = 0.5 * (IN_PREV_POS.xy/IN_PREV_POS.w) + vec2(0.5, 0.5);
+  vec2 currUv = 0.5 * (IN_CURR_POS.xy/IN_CURR_POS.w - get_jitter(gFrame)) + vec2(0.5, 0.5);
+  vec2 prevUv = 0.5 * (IN_PREV_POS.xy/IN_PREV_POS.w - get_previous_jitter(gFrame)) + vec2(0.5, 0.5);
   OUT_VELOCITY = currUv - prevUv;
 }

@@ -23,7 +23,9 @@ layout (location = 1) out vec3 OUT_NORM;
 
 void main()
 {
-  gl_Position = pc.MVP * vec4(IN_POS, 1); 
+  vec4 pos = pc.MVP * vec4(IN_POS, 1);
+  pos += vec4(gFrame.jitter.xy, 0, 0) * pos.w;
+  gl_Position = pos; 
   OUT_UV = IN_UV;
   OUT_NORM = vec3(pc.normalTransform * vec4(IN_NORM, 0));
 }

@@ -82,11 +82,11 @@ AppInit::AppInit(uint32_t init_width, uint32_t init_height)
 
   etna::initialize(params);
   auto surface = create_surface(getWindow()).value();
-  submitCtx = etna::create_submit_context(surface.release(), {init_width, init_height});
+  submitCtx = etna::create_submit_context(surface.release(), {init_width, init_height}, true);
 
   imguiCtx = std::make_unique<ImguiInitilizer>(
     window.get(), 
-    scene::RenderTargetState::baseColorFmt,
+    submitCtx->getSwapchainFmt(),
     submitCtx->getBackbuffersCount());
   
   auto uploadCmd = submitCtx->getCommandPool().allocate();
@@ -100,9 +100,6 @@ void AppInit::mainLoop()
   GuiSystem gui {};
   double deltaT = 0.f;
   double time = SDL_GetTicks64()/1000.0;
-
-  auto &style = ImGui::GetStyle();
-  style.ScaleAllSizes(2.5f);
 
   auto swapchainRecreateCb = [&]() {
     etna::get_context().getDevice().waitIdle();

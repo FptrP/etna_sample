@@ -29,7 +29,7 @@ void main()
   vec4 curPos = pc.MVP * vec4(IN_POS, 1);
   vec4 prevPos = pc.prevMVP * vec4(IN_POS, 1);
 
-  gl_Position = curPos; 
+  gl_Position = curPos + vec4(gFrame.jitter.xy, 0, 0) * curPos.w; 
   OUT_UV = IN_UV;
   OUT_NORM = vec3(pc.normalTransform * vec4(IN_NORM, 0));
 

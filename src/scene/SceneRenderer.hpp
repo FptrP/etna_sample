@@ -19,6 +19,7 @@ struct GlobalFrameConstants
   glm::vec4 sunDirection; // camera space
   glm::vec4 sunColor;
   glm::vec4 viewport; //width, height, .. ...
+  glm::vec4 jitter; //xy - current, zw - previous
 };
 
 struct GlobalFrameConstantHandler
@@ -36,6 +37,13 @@ struct GlobalFrameConstantHandler
   
   void onBeginFrame(); //write data to const buffer
   void onEndFrame(); //next index;
+
+  void setJitterState(bool enable)
+  {
+    if (enable && !enableJitter)
+      invalidateHistory = true;
+    enableJitter = enable;
+  }
 
   const GlobalFrameConstants &getParams() const { return params; }
 
@@ -61,6 +69,10 @@ private:
 
   uint32_t numFrames;
   uint32_t frameIndex = 0;
+
+  static constexpr uint32_t JITTER_COUNT = 8u;
+  uint32_t jitterIndex = 0;
+  bool enableJitter = true;
 
   bool invalidateHistory = true;
 
@@ -99,7 +111,7 @@ struct RenderTargetState
   vk::Format getColorFmt() const { return color[historyIndex].getInfo().format; }
   vk::Format getVelocityFmt() const { return velocity.getInfo().format; }
 
-  static constexpr vk::Format baseColorFmt = vk::Format::eR8G8B8A8Unorm;
+  static constexpr vk::Format baseColorFmt = vk::Format::eR16G16B16A16Sfloat;
 
   void nextFrame() { historyIndex = (historyIndex + 1) % 2; }
   

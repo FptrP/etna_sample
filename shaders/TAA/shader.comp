@@ -17,7 +17,11 @@ layout (set = 0, binding = 2) uniform sampler2D VELOCITY_TEX;
 layout (set = 0, binding = 3) uniform sampler2D HISTORY_COLOR_TEX;
 layout (set = 0, binding = 4) uniform sampler2D HISTORY_DEPTH_TEX;
 
-layout (set = 0, binding = 5, rgba8) uniform image2D OUT_TARGET; 
+layout (set = 0, binding = 5, rgba16f) uniform image2D OUT_TARGET; 
+
+float mitchell_filter(in float x);
+vec4 sample_texture_catmull_rom(in sampler2D tex, vec2 uv);
+float luminance(vec3 c) { return dot(c, vec3(0.2127, 0.7152, 0.0722)); }
 
 layout (local_size_x = 8, local_size_y = 4) in;
 void main()
@@ -30,18 +34,122 @@ void main()
 
   vec2 uv = (pixelPos + vec2(0.5, 0.5))/texSize; 
 
-  vec3 currentColor = texture(COLOR_TEX, uv).rgb;
-  vec2 velocity = texture(VELOCITY_TEX, uv).rg;
+  vec3 currentColor = vec3(0, 0, 0);
+  float colorWeight = 0.f;
 
+  vec3 boxMin = vec3(10.0, 10.0, 10.0);
+  vec3 boxMax = vec3(0.0, 0.0, 0.0);
+
+  float closestDepth = 1.f;
+  vec2 closestDepthUV = uv;
+
+  for (int x = -1; x <= 1; x++)
+  {
+    for (int y = -1; y <= 1; y++)
+    {
+      vec2 sampleUV = clamp(uv + vec2(x, y)/texSize, vec2(0, 0), vec2(1, 1));
+      vec3 colorSample = texture(COLOR_TEX, sampleUV).rgb;
+      float sampleWeight = mitchell_filter(length(vec2(x, y)));
+
+      currentColor += colorSample * sampleWeight;
+      colorWeight += sampleWeight;
+
+      boxMax = max(boxMax, colorSample);
+      boxMin = min(boxMin, colorSample);
+    
+      float depth = texture(DEPTH_TEX, sampleUV).x;
+      if (depth < closestDepth)
+      {
+        closestDepth = depth;
+        closestDepthUV = sampleUV;
+      }
+    }
+  }
+
+  currentColor /= colorWeight;
+
+  vec2 velocity = texture(VELOCITY_TEX, closestDepthUV).rg;
   vec2 prevUV = uv - velocity;
 
-  if (any(lessThan(uv, vec2(0, 0))) || any(greaterThanEqual(uv, vec2(1, 1))))
+  if (any(lessThan(prevUV, vec2(0, 0))) || any(greaterThanEqual(prevUV, vec2(1, 1))))
   {
     imageStore(OUT_TARGET, pixelPos, vec4(currentColor, 0));
     return;
   } 
+  
+  vec3 historyColor = sample_texture_catmull_rom(HISTORY_COLOR_TEX, prevUV).rgb;
 
-  vec3 historyColor = texture(HISTORY_COLOR_TEX, prevUV).rgb;
-  vec3 resultColor = mix(historyColor, currentColor, 0.05);
+  historyColor = clamp(historyColor, boxMin, boxMax);
+
+  float currentWeight = 0.05f;
+  float historyWeight = 1 - currentWeight;
+
+  vec3 compressedCurrent = currentColor * 1.f/(1.f + max(currentColor.x, max(currentColor.y, currentColor.z)));
+  vec3 compressedHistory = historyColor * 1.f/(1.f + max(historyColor.x, max(historyColor.y, historyColor.z)));
+  
+  currentWeight /= (1.f + luminance(compressedCurrent));
+  historyWeight /= (1.f + luminance(compressedHistory));
+
+  vec3 resultColor = (historyColor * historyWeight + currentColor * currentWeight)
+    /max(currentWeight + historyWeight, 0.00001);
+  
   imageStore(OUT_TARGET, pixelPos, vec4(resultColor, 0));
+}
+
+float FilterCubic(in float x, in float B, in float C)
+{
+  float y = 0.0f;
+  float x2 = x * x;
+  float x3 = x * x * x;
+  if(x < 1)
+    y = (12 - 9 * B - 6 * C) * x3 + (-18 + 12 * B + 6 * C) * x2 + (6 - 2 * B);
+  else if (x <= 2)
+    y = (-B - 6 * C) * x3 + (6 * B + 30 * C) * x2 + (-12 * B - 48 * C) * x + (8 * B + 24 * C);
+  return y / 6.0f;
+}
+
+float mitchell_filter(in float x)
+{
+  return FilterCubic(x, 1.0/3.0, 1.0/3.0);
+}
+
+//https://gist.github.com/TheRealMJP/c83b8c0f46b63f3a88a5986f4fa982b1
+vec4 sample_texture_catmull_rom(in sampler2D tex, vec2 uv)
+{
+  vec2 texSize = textureSize(tex, 0);
+  vec2 samplePos = uv * texSize;
+  vec2 texPos1 = floor(samplePos - 0.5f) + 0.5f;
+
+  vec2 f = samplePos - texPos1;
+
+  vec2 w0 = f * (-0.5f + f * (1.0f - 0.5f * f));
+  vec2 w1 = 1.0f + f * f * (-2.5f + 1.5f * f);
+  vec2 w2 = f * (0.5f + f * (2.0f - 1.5f * f));
+  vec2 w3 = f * f * (-0.5f + 0.5f * f);
+
+  vec2 w12 = w1 + w2;
+  vec2 offset12 = w2 / (w1 + w2);
+
+  vec2 texPos0 = texPos1 - 1;
+  vec2 texPos3 = texPos1 + 2;
+  vec2 texPos12 = texPos1 + offset12;
+
+  texPos0 /= texSize;
+  texPos3 /= texSize;
+  texPos12 /= texSize;
+
+  vec4 result = vec4(0.0f);
+  result += textureLod(tex, vec2(texPos0.x, texPos0.y), 0.0f) * w0.x * w0.y;
+  result += textureLod(tex, vec2(texPos12.x, texPos0.y), 0.0f) * w12.x * w0.y;
+  result += textureLod(tex, vec2(texPos3.x, texPos0.y), 0.0f) * w3.x * w0.y;
+
+  result += textureLod(tex, vec2(texPos0.x, texPos12.y), 0.0f) * w0.x * w12.y;
+  result += textureLod(tex, vec2(texPos12.x, texPos12.y), 0.0f) * w12.x * w12.y;
+  result += textureLod(tex, vec2(texPos3.x, texPos12.y), 0.0f) * w3.x * w12.y;
+
+  result += textureLod(tex, vec2(texPos0.x, texPos3.y), 0.0f) * w0.x * w3.y;
+  result += textureLod(tex, vec2(texPos12.x, texPos3.y), 0.0f) * w12.x * w3.y;
+  result += textureLod(tex, vec2(texPos3.x, texPos3.y), 0.0f) * w3.x * w3.y;
+
+  return result;
 }

@@ -37,6 +37,7 @@ struct GlobalParamsSystem
     ImGui::SliderFloat3("Sun radiance", sunRadiance.data(), 0.f, 5.f);
     ImGui::SliderFloat3("Sun direction", sunDir.data(), -1.f, 1.f);
     ImGui::SliderFloat("FOV", &fov, 60.f, 120.f);
+    ImGui::Checkbox("Enable jitter", &enableJitter);
     ImGui::EndChild();
   }
 
@@ -44,7 +45,8 @@ struct GlobalParamsSystem
   {
     handler.setSunColor({sunRadiance[0], sunRadiance[1], sunRadiance[2]});
     handler.setSunDirection({sunDir[0], sunDir[1], sunDir[2]});
-    
+    handler.setJitterState(enableJitter);
+
     if (std::abs(prevFov - fov) > 1e-3)
     {
       handler.updateFov(glm::radians(fov));
@@ -59,6 +61,7 @@ private:
   std::array<float, 3> sunRadiance {3.f, 3.f, 3.f};
   float fov = 90.f;
   float prevFov = -1.f;
+  bool enableJitter = true;
 };
 
 struct EtnaSampleApp : AppInit 
@@ -178,7 +181,8 @@ struct EtnaSampleApp : AppInit
       etna::RenderingAttachment velocityAttachment {
         .view = rts->getVelocity().getView({}),
         .layout = vk::ImageLayout::eColorAttachmentOptimal,
-        .loadOp = vk::AttachmentLoadOp::eClear
+        .loadOp = vk::AttachmentLoadOp::eClear,
+        .clearValue = vk::ClearColorValue {0.f, 0.f, 0.f, 0.f}
       };
 
       etna::RenderingAttachment depthAttachment {
@@ -204,8 +208,6 @@ struct EtnaSampleApp : AppInit
 
     texBlender->blend(cmd, abufferResolver->getTarget(), rts->getColor());
 
-    drawImGui(cmd, rts->getColor());
-
     {
       //blit to backbuffer
       auto srcRes = rts->getColor().getExtent2D();
@@ -228,6 +230,8 @@ struct EtnaSampleApp : AppInit
         {region}, 
         vk::Filter::eLinear);
     }
+
+    drawImGui(cmd, backbuffer);
 
     cmd.transformLayout(backbuffer, vk::ImageLayout::ePresentSrcKHR, {
       vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});

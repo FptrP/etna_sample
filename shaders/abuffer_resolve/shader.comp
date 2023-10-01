@@ -108,7 +108,7 @@ vec4 resolveAbuffer(uint head)
     alpha = color_alpha.a + alpha * (1 - color_alpha.a);
   }
 
-  return vec4(pow(accum, vec3(1/2.2)), alpha); 
+  return vec4(accum, alpha); 
 }
 
 // over c1 a1 c2 = c1 * a1 + (1 - a1) * c2

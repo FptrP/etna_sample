@@ -67,7 +67,7 @@ void main()
   }
   vec3 ambientLight = vec3(0.15, 0.15, 0.15);
   vec3 brdf = BRDF(N, V, L, baseColor, gFrame.sunColor.rgb, ambientLight, metallic, roughness); 
-  brdf = pow(brdf, vec3(1/2.2));
+  //brdf = pow(brdf, vec3(1/2.2));
 
   vec4 outColor = vec4(brdf, alpha);
 

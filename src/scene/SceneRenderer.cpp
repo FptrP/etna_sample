@@ -5,6 +5,21 @@
 namespace scene
 {
 
+static float halton_sequence(uint32_t i, uint32_t b)
+{
+  float f = 1.0f;
+  float r = 0.0f;
+ 
+  while (i > 0)
+  {
+    f /= static_cast<float>(b);
+    r = r + f * static_cast<float>(i % b);
+    i = static_cast<uint32_t>(floorf(static_cast<float>(i) / static_cast<float>(b)));
+  }
+ 
+  return r;
+}
+
 GlobalFrameConstantHandler::GlobalFrameConstantHandler()
   : numFrames {etna::get_context().getNumFramesInFlight()}
 {
@@ -72,12 +87,26 @@ void GlobalFrameConstantHandler::setSunDirection(glm::vec3 dir)
 
 void GlobalFrameConstantHandler::onBeginFrame() //write data to const buffer
 {
+  uint32_t prevJitterIndex = (jitterIndex + JITTER_COUNT - 1) % JITTER_COUNT; 
+
+  params.jitter.x = 2.f * halton_sequence(jitterIndex + 1, 2) - 1.f;
+  params.jitter.y = 2.f * halton_sequence(jitterIndex + 1, 3) - 1.f;
+  params.jitter.z = 2.f * halton_sequence(prevJitterIndex + 1, 2) - 1.f;
+  params.jitter.w = 2.f * halton_sequence(prevJitterIndex + 1, 3) - 1.f;
+
   params.viewProjection = params.projection * params.view;
 
   if (invalidateHistory)
   {
     params.prevViewProjection = params.viewProjection;
+    params.jitter.z = params.jitter.x;
+    params.jitter.w = params.jitter.y;
   }
+
+  params.jitter /= glm::vec4{params.viewport.x, params.viewport.y, params.viewport.x, params.viewport.y};
+  
+  if (!enableJitter)
+    params.jitter = glm::zero<glm::vec4>();
 
   auto ptr = constantUbo.map();
   memcpy(ptr + frameIndex * paramsGpuSize, &params, sizeof(params));
@@ -92,6 +121,7 @@ void GlobalFrameConstantHandler::onEndFrame() //next index;
     spdlog::warn("History invalidate");
     
   invalidateHistory = false;
+  jitterIndex = (jitterIndex + 1) % JITTER_COUNT;
 }
 
 
@@ -107,10 +137,11 @@ void RenderTargetState::onResolutionChanged(uint32_t new_w, uint32_t new_h)
     depth[i] = etna::get_context().createImage(
     etna::ImageCreateInfo::depthRT(new_w, new_h, vk::Format::eD24UnormS8Uint));
     color[i] = etna::get_context().createImage(
-      etna::ImageCreateInfo::colorRT(new_w, new_h, vk::Format::eR8G8B8A8Unorm));
+      etna::ImageCreateInfo::colorRT(new_w, new_h, baseColorFmt));
   }
+
   currentColor = etna::get_context().createImage(
-      etna::ImageCreateInfo::colorRT(new_w, new_h, vk::Format::eR8G8B8A8Unorm));
+      etna::ImageCreateInfo::colorRT(new_w, new_h, baseColorFmt));
 
   velocity = etna::get_context().createImage(
     etna::ImageCreateInfo::colorRT(new_w, new_h, vk::Format::eR16G16Sfloat));  
@@ -217,6 +248,12 @@ uint32_t SceneRenderer::bindDS(
   return renderFlags;
 }
 
+struct DepthPushConstants
+{
+  glm::mat4 MVP;
+  glm::vec4 jitter;
+};
+
 void SceneRenderer::depthPrepass(etna::SyncCommandBuffer &cmd, 
   const GlobalFrameConstantHandler &gframe, const GLTFScene &scene)
 {
@@ -230,10 +267,16 @@ void SceneRenderer::depthPrepass(etna::SyncCommandBuffer &cmd,
     {
       for (auto &tId : dc.transformIds)
       {
+        DepthPushConstants dPC;
+
         auto &transform = scene.getTransform(tId);
         auto normalMat = glm::transpose(glm::inverse(gframe.getParams().view * transform.modelTransform));
         auto MVP = gframe.getParams().viewProjection * transform.modelTransform;
-        cmd.pushConstants(pipeline.getShaderProgram(), 0, MVP);
+        
+        dPC.MVP = MVP;
+        dPC.jitter = gframe.getParams().jitter;
+
+        cmd.pushConstants(pipeline.getShaderProgram(), 0, dPC);
         cmd.drawIndexed(dc.indexCount, 1, dc.firstIndex, dc.vertexOffset, 0);
       }
     }

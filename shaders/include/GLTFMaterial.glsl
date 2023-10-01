@@ -20,6 +20,7 @@ struct GlobalFrameParams
   vec4 sunDirection;
   vec4 sunColor;
   vec4 viewport;
+  vec4 jitter;
 };
 
 #define RF_NO_BASECOLOR_TEX 1u
@@ -45,6 +46,15 @@ uint get_render_flags(in PushConstMaterial mat)
   return floatBitsToUint(mat.metallic_roughness_alphaCutoff_flags.w);
 }
 
+vec2 get_jitter(in GlobalFrameParams p)
+{
+  return p.jitter.xy;
+}
+
+vec2 get_previous_jitter(in GlobalFrameParams p)
+{
+  return p.jitter.zw;
+}
 
 
 #endif
